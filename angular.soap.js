@@ -2,9 +2,9 @@ angular.module('angularSoap', [])
 
 .factory("$soap",['$q',function($q){
 	return {
-		post: function(url, action, subaction, params){
+		post: function(url, service, action, subaction, params){
 			var deferred = $q.defer();
-			
+
 			//Create SOAPClientParameters
 			var soapParams = new SOAPClientParameters();
 			for(var param in params){
@@ -20,7 +20,7 @@ angular.module('angularSoap', [])
 				}
 			}
 
-			SOAPClient.invoke(url, action, subaction, soapParams, true, soapCallback);
+			SOAPClient.invoke(url, service, action, subaction, soapParams, true, soapCallback);
 
 			return deferred.promise;
 		},
