@@ -22,7 +22,13 @@ function SOAPClientParameters() {
                 case "number":
                 case "boolean":
                 case "object":
+                 if(_pl[p] !== null) {
+                //     // <d4p1:Libelle i:nil="true"/>
+                //     xml += "<" + p + " i:nil=\"true\"/>";
+                // } else
+                // {
                     xml += "<" + p + ">" + SOAPClientParameters._serialize(_pl[p]) + "</" + p + ">";
+                     }
                     break;
                 default:
                     break;
@@ -103,10 +109,15 @@ SOAPClient.username = null;
 SOAPClient.password = null;
 
 SOAPClient.invoke = function (url, service, method, submethod, parameters, async, callback) {
-    if (async)
-        SOAPClient._loadWsdl(url, service, method, submethod, parameters, async, callback);
-    else
-        return SOAPClient._loadWsdl(url, service, method, submethod, parameters, async, callback);
+    try {
+        if (async)
+            SOAPClient._loadWsdl(url, service, method, submethod, parameters, async, callback);
+        else
+            return SOAPClient._loadWsdl(url, service, method, submethod, parameters, async, callback);
+    } catch (error) {
+        throw error;
+    }
+
 };
 
 // private: wsdl cache
@@ -114,25 +125,44 @@ SOAPClient_cacheWsdl = new Array();
 
 // private: invoke async
 SOAPClient._loadWsdl = function (url, service, method, submethod, parameters, async, callback) {
-    // load from cache?
-    var wsdl = SOAPClient_cacheWsdl[url];
-    if (wsdl + "" != "" && wsdl + "" != "undefined")
-        return SOAPClient._sendSoapRequest(url, service, method, submethod, parameters, async, callback, wsdl);
-    // get wsdl
-    var xmlHttp = SOAPClient._getXmlHttp();
-    xmlHttp.open("GET", url + "?wsdl", async);
-    if (async) {
-        xmlHttp.onreadystatechange = function () {
-            if (xmlHttp.readyState == 4)
-                SOAPClient._onLoadWsdl(url, service, method, submethod, parameters, async, callback, xmlHttp);
-        };
+    try {
+
+        // load from cache?
+        var wsdl = SOAPClient_cacheWsdl[url];
+        if (wsdl + "" != "" && wsdl + "" != "undefined")
+            return SOAPClient._sendSoapRequest(url, service, method, submethod, parameters, async, callback, wsdl);
+        // get wsdl
+        var xmlHttp = SOAPClient._getXmlHttp();
+        xmlHttp.open("GET", url + "?wsdl", async);
+        if (async) {
+            xmlHttp.onreadystatechange = function () {
+                if (xmlHttp.readyState == 4) {
+                    if (xmlHttp.status == 200) {
+                        SOAPClient._onLoadWsdl(url, service, method, submethod, parameters, async, callback, xmlHttp);
+                    }
+                    else {
+                        // console.log(xmlHttp.responseText);
+                        new Error("Sorry");
+                    }
+                }
+            };
+        }
+
+        xmlHttp.send(null);
+
+
+        if (!async)
+            return SOAPClient._onLoadWsdl(url, service, method, submethod, parameters, async, callback, xmlHttp);
+
+    } catch (error) {
+
     }
-    xmlHttp.send(null);
-    if (!async)
-        return SOAPClient._onLoadWsdl(url, service, method, submethod, parameters, async, callback, xmlHttp);
 };
 SOAPClient._onLoadWsdl = function (url, service, method, submethod, parameters, async, callback, req) {
     var wsdl = req.responseXML;
+    if (wsdl == null) {
+        wsdl = req.responseText;
+    }
     SOAPClient_cacheWsdl[url] = wsdl;	// save a copy in cache
     return SOAPClient._sendSoapRequest(url, service, method, submethod, parameters, async, callback, wsdl);
 };
@@ -145,7 +175,8 @@ SOAPClient._sendSoapRequest = function (url, service, method, submethod, paramet
         "<soapenv:Envelope " +
         "xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" " +
         "xmlns:tem=\"http://tempuri.org/\" " +
-        "xmlns:dal=\"http://schemas.datacontract.org/2004/07/Dalkia.Dispatch.Business.Factory\" " +
+        "xmlns:b=\"http://schemas.datacontract.org/2004/07/Dalkia.Dispatch.Business\" " +
+        "xmlns:f=\"http://schemas.datacontract.org/2004/07/Dalkia.Dispatch.Business.Factory\" " +
         "> " +
         "<soapenv:Header/>" +
         "<soapenv:Body>" +
@@ -154,6 +185,7 @@ SOAPClient._sendSoapRequest = function (url, service, method, submethod, paramet
         sr += "<" + submethod + " xmlns=\"" + ns + "\">";
     }
     sr += parameters.toXml();
+
     if (submethod) {
         sr += "</" + submethod + ">";
     }
@@ -170,7 +202,7 @@ SOAPClient._sendSoapRequest = function (url, service, method, submethod, paramet
     else
         xmlHttp.open("POST", url, async);
     var soapaction = ((ns.lastIndexOf("/") != ns.length - 1) ? ns + "/" : ns) + service + "/" + method;
-    console.log("SOAPAction", soapaction);
+    // console.log("SOAPAction", soapaction);
     xmlHttp.setRequestHeader("SOAPAction", soapaction);
     xmlHttp.setRequestHeader("Content-Type", "text/xml; charset=utf-8");
     if (async) {
@@ -179,7 +211,7 @@ SOAPClient._sendSoapRequest = function (url, service, method, submethod, paramet
                 SOAPClient._onSendSoapRequest(method, async, callback, wsdl, xmlHttp);
         };
     }
-    console.log(sr);
+    // console.log(sr);
     xmlHttp.send(sr);
     if (!async)
         return SOAPClient._onSendSoapRequest(method, async, callback, wsdl, xmlHttp);
@@ -198,8 +230,16 @@ SOAPClient._onSendSoapRequest = function (method, async, callback, wsdl, req) {
                 throw new Error(500, req.responseXML.getElementsByTagName("faultstring")[0].childNodes[0].nodeValue);
         }
     }
-    else
-        o = SOAPClient._soapresult2object(nd[0], wsdl);
+    else {
+        var x2js = new X2JS();
+        o = x2js.xml2json(nd[0]);
+    }
+
+
+
+    //o = SOAPClient._soapresult2object(nd[0], wsdl);
+    //o = xmlToJson(nd[0]);
+
     if (callback)
         callback(o, req.responseXML);
     if (!async)
@@ -381,4 +421,43 @@ SOAPClient._toBase64 = function (input) {
     } while (i < input.length);
 
     return output;
+};
+
+// Changes XML to JSON
+function xmlToJson(xml) {
+
+    // Create the return object
+    var obj = {};
+
+    if (xml.nodeType == 1) { // element
+        // do attributes
+        if (xml.attributes.length > 0) {
+            obj["@attributes"] = {};
+            for (var j = 0; j < xml.attributes.length; j++) {
+                var attribute = xml.attributes.item(j);
+                obj["@attributes"][attribute.nodeName] = attribute.nodeValue;
+            }
+        }
+    } else if (xml.nodeType == 3) { // text
+        obj = xml.nodeValue;
+    }
+
+    // do children
+    if (xml.hasChildNodes()) {
+        for (var i = 0; i < xml.childNodes.length; i++) {
+            var item = xml.childNodes.item(i);
+            var nodeName = item.nodeName;
+            if (typeof (obj[nodeName]) == "undefined") {
+                obj[nodeName] = xmlToJson(item);
+            } else {
+                if (typeof (obj[nodeName].push) == "undefined") {
+                    var old = obj[nodeName];
+                    obj[nodeName] = [];
+                    obj[nodeName].push(old);
+                }
+                obj[nodeName].push(xmlToJson(item));
+            }
+        }
+    }
+    return obj;
 };
