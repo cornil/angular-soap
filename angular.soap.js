@@ -1,8 +1,10 @@
+/* global SOAPClient, SOAPClientParameters */
 angular.module('angularSoap', [])
 
 .factory("$soap",['$q',function($q){
 	return {
 		post: function(url, service, action, subaction, params){
+
 			var deferred = $q.defer();
 
 			//Create SOAPClientParameters
@@ -13,12 +15,13 @@ angular.module('angularSoap', [])
 
 			//Create Callback
 			var soapCallback = function(e){
-				if(e.constructor.toString().indexOf("function Error()") != -1){
-					deferred.reject("An error has occurred.");
-				} else {
+				if(e !== null && e.constructor.toString().indexOf("function Error()") == -1){
 					deferred.resolve(e);
+				} else {
+                    deferred.reject("An error has occurred.");
+
 				}
-			}
+			};
 
 			SOAPClient.invoke(url, service, action, subaction, soapParams, true, soapCallback);
 
@@ -28,5 +31,5 @@ angular.module('angularSoap', [])
 			SOAPClient.username = username;
 			SOAPClient.password = password;
 		}
-	}
+	};
 }]);
